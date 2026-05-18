@@ -160,7 +160,7 @@
     </div>
 
     <script>
-        // 設定您的 Google Apps Script 部署 URL (已更新)
+        // 設定您的 Google Apps Script 部署 URL (已更換為最新的部署網址)
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwBHsIThW6SO4VCjLCtWaGqpWR-CILCGmf75d5rV-kxwTbSPS7Vd_48ScsrGkH8JhVaog/exec";
 
         // 座位陣列：依照黑板在下方，第一排在最底下的視覺邏輯
@@ -229,7 +229,7 @@
                 
                 Swal.fire({
                     title: '進入測試模擬模式',
-                    text: '連線 GAS 失敗（原因：' + err.message + '）。系統已自動啟用「模擬模式」供您預覽。您可以直接在畫面上進行登記測試！',
+                    text: '連線 GAS 失敗（原因：' + err.message + '）。系統已自動啟用「模擬模式」供您預覽。您可以直接在畫面上進行登記測試！\n\n如果您已經完成部署，請務必確認您已進行「首次手動執行授權」！',
                     icon: 'info',
                     confirmButtonText: '開始測試'
                 });
