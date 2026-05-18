@@ -159,35 +159,33 @@
         </div>
     </div>
 
-    <script>
-        // 設定您的 Google Apps Script 部署 URL (保留您最新部署的網址)
-        const GAS_API_URL = "https://script.google.com/macros/s/AKfycby7GyxxZFBS4OTViIENQDmfWX3c9G2ezm1-C-jIxt19FsBg4qSs8mubNmB1EuL8lPi5kA/exec";
+   const GAS_API_URL = "https://script.google.com/macros/s/AKfycby7GyxxZFBS4OTViIENQDmfWX3c9G2ezm1-C-jIxt19FsBg4qSs8mubNmB1EuL8lPi5kA/exec";
 
-        // JSONP 通訊函式 (無敵防護：保證絕對不被 CORS 阻擋)
-        function fetchGAS(paramsObj) {
-            return new Promise((resolve, reject) => {
-                const callbackName = 'gas_cb_' + Math.round(1000000 * Math.random());
-                window[callbackName] = function(data) {
-                    delete window[callbackName];
-                    document.body.removeChild(script);
-                    resolve(data);
-                };
-                
-                const params = new URLSearchParams(paramsObj);
-                params.append('callback', callbackName);
-                
-                const script = document.createElement('script');
-                script.src = `${GAS_API_URL}?${params.toString()}`;
-                
-                script.onerror = () => {
-                    delete window[callbackName];
-                    document.body.removeChild(script);
-                    reject(new Error("網路連線或授權失敗，請檢查網址或是否已完成首次授權"));
-                };
-                
-                document.body.appendChild(script);
-            });
-        }
+function fetchGAS(paramsObj) {
+  return new Promise((resolve, reject) => {
+    const callbackName = "gas_cb_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+
+    window[callbackName] = function(data) {
+      resolve(data);
+      delete window[callbackName];
+      script.remove();
+    };
+
+    const params = new URLSearchParams(paramsObj);
+    params.append("callback", callbackName);
+
+    const script = document.createElement("script");
+    script.src = GAS_API_URL + "?" + params.toString();
+
+    script.onerror = function() {
+      delete window[callbackName];
+      script.remove();
+      reject(new Error("GAS 連線失敗，請檢查部署權限或網址是否正確"));
+    };
+
+    document.body.appendChild(script);
+  });
+}
 
         // 座位陣列
         const seatLayout = [
