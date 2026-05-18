@@ -212,19 +212,22 @@ function fetchGAS(paramsObj) {
 
         // 取得紀錄
         async function fetchRecords() {
-            Swal.fire({
-                title: '更新資料中...',
-                allowOutsideClick: false,
-                didOpen: () => Swal.showLoading()
-            });
+  try {
+    const data = await fetchGAS({
+      action: "getTodayRecords"
+    });
 
-            if (useMockData) {
-                setTimeout(() => {
-                    handleRecordsUpdate(mockDatabase);
-                    Swal.close();
-                }, 400);
-                return;
-            }
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    handleRecordsUpdate(data);
+
+  } catch (err) {
+    console.error(err);
+    alert("讀取紀錄失敗：" + err.message);
+  }
+}
 
             try {
                 // 改用 JSONP 方式獲取資料，徹底繞過 CORS
@@ -340,60 +343,39 @@ function fetchGAS(paramsObj) {
 
         // 送出表單資料
         async function submitForm() {
-            const seat = document.getElementById('input-seat').value;
-            const className = document.getElementById('input-class').value.trim();
-            const no = document.getElementById('input-no').value.trim();
-            const name = document.getElementById('input-name').value.trim();
+  const seat = document.getElementById("input-seat").value;
+  const className = document.getElementById("input-class").value.trim();
+  const no = document.getElementById("input-no").value.trim();
+  const name = document.getElementById("input-name").value.trim();
 
-            if (!className) { Swal.fire('等等!', '「班級」不可以是空白的喔！', 'warning'); return; }
-            if (!no) { Swal.fire('等等!', '「座號」不可以是空白的喔！', 'warning'); return; }
-            if (isNaN(no) || Number(no) <= 0) { Swal.fire('等等!', '座號只能輸入正確的數字喔！', 'warning'); return; }
-            if (!name) { Swal.fire('等等!', '「姓名」不可以是空白的喔！', 'warning'); return; }
+  if (!className || !no || !name) {
+    alert("班級、座號、姓名都要填喔！");
+    return;
+  }
 
-            const btn = document.getElementById('btn-submit');
-            const originalHtml = btn.innerHTML;
-            btn.innerHTML = `<i class="ph ph-spinner animate-spin"></i> 送出中...`;
-            btn.disabled = true;
+  try {
+    const res = await fetchGAS({
+      action: "submitRecord",
+      seat: seat,
+      className: className,
+      no: no,
+      name: name
+    });
 
-            const payload = {
-                action: 'submitRecord',
-                seat: seat,
-                className: className,
-                no: no,
-                name: name
-            };
+    if (res.error) {
+      alert(res.error);
+      return;
+    }
 
-            if (useMockData) {
-                setTimeout(() => {
-                    const isTaken = mockDatabase.some(r => r.seat === seat);
-                    btn.innerHTML = originalHtml;
-                    btn.disabled = false;
+    alert("登記成功！");
+    closeModal();
+    handleRecordsUpdate(res.records);
 
-                    if (isTaken) {
-                        Swal.fire('哎呀!', '這個座位剛剛已經被別人登記走了！請重新選擇。', 'error');
-                    } else {
-                        const now = new Date();
-                        mockDatabase.push({
-                            time: now.toLocaleTimeString('zh-TW', { hour12: false }),
-                            seat: seat,
-                            className: className,
-                            studentNo: no,
-                            studentName: name
-                        });
-                        Swal.fire({
-                            title: '登記成功 (測試)!',
-                            text: `班級 ${className} 座號 ${no} 的 ${name} 同學，座位已登記完成！`,
-                            icon: 'success',
-                            timer: 2000,
-                            timerProgressBar: true
-                        });
-                        closeModal();
-                        handleRecordsUpdate(mockDatabase);
-                    }
-                }, 600);
-                return;
-            }
-
+  } catch (err) {
+    console.error(err);
+    alert("寫入失敗：" + err.message);
+  }
+}
             try {
                 // 實體 API 送出 (改用 JSONP 請求，徹底繞過 CORS 限制)
                 const res = await fetchGAS(payload);
