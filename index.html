@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>電腦教室座位使用紀錄</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SweetAlert2 (可愛提示訊息) -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            min-height: 100vh;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        .seat-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .seat-card:hover {
+            transform: translateY(-5px);
+        }
+        /* 自訂 SweetAlert 按鈕顏色 */
+        .swal2-confirm {
+            background-color: #3b82f6 !important;
+            border-radius: 9999px !important;
+            padding: 10px 24px !important;
+        }
+        .swal2-cancel {
+            background-color: #ef4444 !important;
+            border-radius: 9999px !important;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 text-gray-800">
+
+    <div class="max-w-4xl mx-auto space-y-6">
+        
+        <!-- Header -->
+        <header class="glass-panel p-6 text-center relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-400 via-green-400 to-yellow-400"></div>
+            <h1 class="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600 mb-2">
+                💻 電腦教室座位登記
+            </h1>
+            <p class="text-gray-600 font-bold mb-4">請點選你今天使用的座位！</p>
+            
+            <div class="flex flex-wrap justify-center items-center gap-4 text-sm md:text-base">
+                <div class="bg-blue-100 text-blue-800 px-4 py-2 rounded-full font-bold shadow-sm flex items-center gap-2">
+                    <i class="ph ph-users-three text-xl"></i>
+                    今日已登記：<span id="stats-used">0</span> / 39
+                </div>
+                <button onclick="fetchRecords()" class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 px-4 py-2 rounded-full font-bold shadow-sm flex items-center gap-2 transition-colors">
+                    <i class="ph ph-arrows-clockwise text-xl"></i> 重新整理
+                </button>
+            </div>
+            
+            <!-- 老師登入按鈕 -->
+            <button onclick="promptTeacher()" class="absolute top-4 right-4 text-gray-400 hover:text-purple-600 transition-colors" title="老師專區">
+                <i class="ph-fill ph-chalkboard-teacher text-2xl"></i>
+            </button>
+        </header>
+
+        <!-- 座位表區塊 -->
+        <main class="glass-panel p-4 md:p-8">
+            <!-- 座位網格 (動態產生) -->
+            <div id="seating-grid" class="grid grid-cols-4 gap-2 md:gap-4 mb-8">
+                <!-- JavaScript 會在這裡插入座位卡片 -->
+            </div>
+
+            <!-- 教室前方設備 (已對調位置：教師座位在上，大螢幕在下) -->
+            <div class="mt-8 space-y-4">
+                <div class="w-2/3 mx-auto bg-amber-600 text-white p-3 rounded-lg text-center shadow-md border-b-4 border-amber-800 flex items-center justify-center gap-2">
+                    <i class="ph-fill ph-desk text-xl"></i>
+                    <span class="font-bold">教師座位</span>
+                </div>
+                <div class="bg-gradient-to-r from-gray-700 to-gray-900 text-white p-4 rounded-xl text-center shadow-lg border-b-4 border-gray-950 flex items-center justify-center gap-2 relative overflow-hidden">
+                    <div class="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
+                    <i class="ph-fill ph-monitor-play text-2xl relative z-10"></i>
+                    <span class="font-black tracking-widest relative z-10">86 吋大屏螢幕</span>
+                </div>
+            </div>
+        </main>
+
+        <!-- 老師查看區塊 (預設隱藏) -->
+        <section id="teacher-panel" class="glass-panel p-6 hidden">
+            <div class="flex items-center justify-between mb-4 border-b pb-2">
+                <h2 class="text-2xl font-bold text-purple-700 flex items-center gap-2">
+                    <i class="ph-fill ph-clipboard-text"></i> 今日詳細紀錄
+                </h2>
+                <button onclick="document.getElementById('teacher-panel').classList.add('hidden')" class="text-gray-500 hover:text-red-500">
+                    <i class="ph-fill ph-x-circle text-2xl"></i>
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-purple-100 text-purple-800">
+                            <th class="p-3 rounded-tl-lg">時間</th>
+                            <th class="p-3">班級</th>
+                            <th class="p-3">座位</th>
+                            <th class="p-3">座號</th>
+                            <th class="p-3 rounded-tr-lg">姓名</th>
+                        </tr>
+                    </thead>
+                    <tbody id="record-table-body">
+                        <!-- 動態插入紀錄 -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- 填寫表單 Modal (隱藏) -->
+    <div id="form-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform scale-95 transition-transform duration-300" id="modal-content">
+            <div class="bg-blue-500 p-4 text-center">
+                <h2 class="text-2xl font-bold text-white flex justify-center items-center gap-2">
+                    <i class="ph-fill ph-desktop"></i> 登記座位
+                </h2>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-gray-700 font-bold mb-1">電腦座位 (不可改)</label>
+                    <input type="text" id="input-seat" readonly class="w-full bg-gray-100 border-2 border-gray-200 rounded-xl p-3 text-gray-500 font-bold text-center text-xl cursor-not-allowed">
+                </div>
+                <div>
+                    <label class="block text-gray-700 font-bold mb-1">班級 <span class="text-red-500">*</span></label>
+                    <input type="text" id="input-class" placeholder="例: 702 或 八年五班" class="w-full border-2 border-blue-200 focus:border-blue-500 rounded-xl p-3 font-bold text-lg outline-none transition-colors">
+                </div>
+                <div>
+                    <label class="block text-gray-700 font-bold mb-1">學生座號 <span class="text-red-500">*</span></label>
+                    <input type="number" id="input-no" min="1" placeholder="例: 15" class="w-full border-2 border-blue-200 focus:border-blue-500 rounded-xl p-3 font-bold text-lg outline-none transition-colors">
+                </div>
+                <div>
+                    <label class="block text-gray-700 font-bold mb-1">學生姓名 <span class="text-red-500">*</span></label>
+                    <input type="text" id="input-name" placeholder="請輸入姓名" class="w-full border-2 border-blue-200 focus:border-blue-500 rounded-xl p-3 font-bold text-lg outline-none transition-colors">
+                </div>
+                
+                <div class="flex gap-3 pt-4">
+                    <button onclick="closeModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 rounded-xl transition-colors">
+                        取消
+                    </button>
+                    <button onclick="submitForm()" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-xl shadow-md transition-colors flex justify-center items-center gap-2" id="btn-submit">
+                        <i class="ph-bold ph-paper-plane-tilt"></i> 送出登記
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 座位陣列：依照黑板在下方，第一排在最底下的視覺邏輯
+        const seatLayout = [
+            ['10', '20', '30', '備用'],
+            ['9',  '19', '29', '39'],
+            ['8',  '18', '28', '38'],
+            ['7',  '17', '27', '37'],
+            ['6',  '16', '26', '36'],
+            ['5',  '15', '25', '35'],
+            ['4',  '14', '24', '34'],
+            ['3',  '13', '23', '33'],
+            ['2',  '12', '22', '32'],
+            ['1',  '11', '21', '31']
+        ];
+
+        // 判斷是否在本地端/Canvas預覽 (如果找不到 google.script 則為 true)
+        const isLocalPreview = typeof google === 'undefined';
+        
+        // 儲存今日紀錄狀態
+        let currentRecords = [];
+        
+        // 本地模擬資料庫 (加入預設欄位)
+        let mockDatabase = [
+            // { time: "08:15:30", seat: "5", className: "803", studentNo: "12", studentName: "王小明" }
+        ];
+
+        // 初始化
+        window.onload = () => {
+            renderSeats([]);
+            fetchRecords();
+        };
+
+        // 取得紀錄 (向 GAS 請求)
+        function fetchRecords() {
+            Swal.fire({
+                title: '更新資料中...',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            if (isLocalPreview) {
+                // 模擬網路延遲
+                setTimeout(() => {
+                    handleRecordsUpdate(mockDatabase);
+                    Swal.close();
+                }, 500);
+            } else {
+                google.script.run
+                    .withSuccessHandler(res => {
+                        handleRecordsUpdate(res);
+                        Swal.close();
+                    })
+                    .withFailureHandler(err => {
+                        Swal.fire('錯誤', '無法讀取資料，請確認網路連線', 'error');
+                    })
+                    .getTodayRecords();
+            }
+        }
+
+        // 處理紀錄更新畫面
+        function handleRecordsUpdate(records) {
+            currentRecords = records;
+            renderSeats(records);
+            updateTeacherTable(records);
+            
+            // 更新統計
+            const totalSeats = 39; // 扣除一個備用
+            document.getElementById('stats-used').innerText = records.length;
+        }
+
+        // 渲染座位表
+        function renderSeats(records) {
+            const grid = document.getElementById('seating-grid');
+            grid.innerHTML = '';
+
+            // 建立快速查詢的 Map
+            const recordMap = {};
+            records.forEach(r => {
+                recordMap[r.seat] = r;
+            });
+
+            seatLayout.forEach((row) => {
+                row.forEach((seatNo) => {
+                    const btn = document.createElement('button');
+                    btn.className = `seat-card relative flex flex-col items-center justify-center p-2 md:p-4 rounded-xl shadow-sm border-2 font-black text-base md:text-xl overflow-hidden aspect-square`;
+                    
+                    if (seatNo === '備用') {
+                        // 備用座位樣式
+                        btn.classList.add('bg-gray-200', 'text-gray-400', 'border-gray-300', 'cursor-not-allowed', 'opacity-70');
+                        btn.innerHTML = `<i class="ph-fill ph-prohibit text-2xl mb-1"></i><span class="text-sm">備用</span>`;
+                        btn.disabled = true;
+                    } 
+                    else if (recordMap[seatNo]) {
+                        // 已登記座位樣式
+                        const rec = recordMap[seatNo];
+                        btn.classList.add('bg-green-400', 'text-white', 'border-green-500', 'cursor-not-allowed', 'shadow-inner');
+                        btn.innerHTML = `
+                            <i class="ph-fill ph-check-circle text-xl md:text-2xl mb-1"></i>
+                            <span class="text-xs font-bold opacity-80">${rec.className || ''}</span>
+                            <span class="text-lg md:text-2xl">${rec.studentNo} 號</span>
+                            <div class="absolute top-1 left-1 text-[10px] bg-green-600 px-1 rounded shadow-sm hidden md:block">已登記</div>
+                        `;
+                        btn.onclick = () => {
+                            Swal.fire('已登記', `這個座位由 [${rec.className || '未設定'}] ${rec.studentNo}號 ${rec.studentName} 使用中`, 'info');
+                        };
+                    } 
+                    else {
+                        // 可使用座位樣式
+                        btn.classList.add('bg-white', 'text-blue-600', 'border-blue-200', 'hover:border-blue-400', 'hover:bg-blue-50', 'hover:shadow-lg');
+                        btn.innerHTML = `
+                            <i class="ph-duotone ph-desktop text-2xl md:text-3xl text-blue-400 mb-1"></i>
+                            <span>${seatNo}</span>
+                        `;
+                        btn.onclick = () => openModal(seatNo);
+                    }
+                    
+                    grid.appendChild(btn);
+                });
+            });
+        }
+
+        // 開啟填寫表單
+        function openModal(seatNo) {
+            document.getElementById('input-seat').value = seatNo;
+            document.getElementById('input-class').value = '';
+            document.getElementById('input-no').value = '';
+            document.getElementById('input-name').value = '';
+            
+            const modal = document.getElementById('form-modal');
+            const content = document.getElementById('modal-content');
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            // 小動畫
+            setTimeout(() => {
+                content.classList.remove('scale-95');
+                content.classList.add('scale-100');
+            }, 10);
+            
+            // 自動 focus 在班級輸入框
+            setTimeout(() => document.getElementById('input-class').focus(), 300);
+        }
+
+        // 關閉填寫表單
+        function closeModal() {
+            const modal = document.getElementById('form-modal');
+            const content = document.getElementById('modal-content');
+            
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }, 300);
+        }
+
+        // 送出表單資料
+        function submitForm() {
+            const seat = document.getElementById('input-seat').value;
+            const className = document.getElementById('input-class').value.trim();
+            const no = document.getElementById('input-no').value.trim();
+            const name = document.getElementById('input-name').value.trim();
+
+            // 防呆檢查
+            if (!className) {
+                Swal.fire('等等!', '「班級」不可以是空白的喔！', 'warning');
+                return;
+            }
+            if (!no) {
+                Swal.fire('等等!', '「座號」不可以是空白的喔！', 'warning');
+                return;
+            }
+            if (isNaN(no) || Number(no) <= 0) {
+                Swal.fire('等等!', '座號只能輸入正確的數字喔！', 'warning');
+                return;
+            }
+            if (!name) {
+                Swal.fire('等等!', '「姓名」不可以是空白的喔！', 'warning');
+                return;
+            }
+
+            // UI 狀態：處理中
+            const btn = document.getElementById('btn-submit');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = `<i class="ph ph-spinner animate-spin"></i> 送出中...`;
+            btn.disabled = true;
+
+            const formData = { seat: seat, className: className, no: no, name: name };
+
+            if (isLocalPreview) {
+                // 模擬後端邏輯
+                setTimeout(() => {
+                    const isTaken = mockDatabase.some(r => r.seat === seat);
+                    if(isTaken) {
+                        Swal.fire('哎呀!', '這個座位剛剛已經被別人登記走了！請重新選擇。', 'error');
+                    } else {
+                        const now = new Date();
+                        mockDatabase.push({
+                            time: now.toLocaleTimeString('zh-TW', {hour12: false}),
+                            seat: seat,
+                            className: className,
+                            studentNo: no,
+                            studentName: name
+                        });
+                        Swal.fire('登記成功!', `座位 ${seat} 已經登記完成囉！`, 'success');
+                        closeModal();
+                        handleRecordsUpdate(mockDatabase);
+                    }
+                    btn.innerHTML = originalHtml;
+                    btn.disabled = false;
+                }, 800);
+            } else {
+                // 呼叫 GAS
+                google.script.run
+                    .withSuccessHandler(res => {
+                        btn.innerHTML = originalHtml;
+                        btn.disabled = false;
+                        
+                        if (res.error) {
+                            Swal.fire('哎呀!', res.error, 'error');
+                        } else {
+                            Swal.fire('登記成功!', '你的座位已經記錄起來囉！', 'success');
+                            closeModal();
+                            handleRecordsUpdate(res.records);
+                        }
+                    })
+                    .withFailureHandler(err => {
+                        btn.innerHTML = originalHtml;
+                        btn.disabled = false;
+                        Swal.fire('錯誤', '網路好像有點問題，請再試一次', 'error');
+                    })
+                    .submitRecord(formData);
+            }
+        }
+
+        // 老師功能：驗證密碼
+        function promptTeacher() {
+            Swal.fire({
+                title: '教師專區',
+                input: 'password',
+                inputLabel: '請輸入密碼查看今日紀錄',
+                inputPlaceholder: '請輸入密碼',
+                showCancelButton: true,
+                confirmButtonText: '確定',
+                cancelButtonText: '取消',
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    if (result.value === 'teacher123') {
+                        document.getElementById('teacher-panel').classList.remove('hidden');
+                        Swal.fire('驗證成功', '已解鎖老師查看區塊', 'success');
+                        // 滾動到表格區
+                        setTimeout(() => {
+                            document.getElementById('teacher-panel').scrollIntoView({ behavior: 'smooth' });
+                        }, 300);
+                    } else {
+                        Swal.fire('錯誤', '密碼不正確喔！', 'error');
+                    }
+                }
+            });
+        }
+
+        // 更新老師表格資料
+        function updateTeacherTable(records) {
+            const tbody = document.getElementById('record-table-body');
+            tbody.innerHTML = '';
+            
+            if(records.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4 text-gray-500">今日目前尚無紀錄</td></tr>`;
+                return;
+            }
+
+            // 依照時間排序 (最新在最上面)
+            const sortedRecords = [...records].reverse();
+
+            sortedRecords.forEach((r, index) => {
+                const tr = document.createElement('tr');
+                tr.className = index % 2 === 0 ? 'bg-white' : 'bg-purple-50/50';
+                tr.innerHTML = `
+                    <td class="p-3 border-b">${r.time}</td>
+                    <td class="p-3 border-b font-bold text-purple-700">${r.className || ''}</td>
+                    <td class="p-3 border-b font-bold text-blue-600"><div class="bg-blue-100 w-10 h-10 flex items-center justify-center rounded-full">${r.seat}</div></td>
+                    <td class="p-3 border-b text-lg">${r.studentNo}</td>
+                    <td class="p-3 border-b">${r.studentName}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+</html>
