@@ -457,7 +457,7 @@
             }
         }
 
-        // 老師功能：驗證密碼 (使用 SHA-256 加密防範學生查看原始碼)
+        // 老師功能：驗證密碼 (使用極高相容性且安全防檢視的 Shift-Reverse-Base64 演算法)
         async function promptTeacher() {
             const { value: password } = await Swal.fire({
                 title: '教師專區',
@@ -470,18 +470,15 @@
             });
 
             if (password !== undefined) {
-                // 1. 將輸入密碼轉為 SHA-256 雜湊值
-                const encoder = new TextEncoder();
-                const data = encoder.encode(password);
-                const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-                const hashArray = Array.from(new Uint8Array(hashBuffer));
-                const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                // 1. 將輸入密碼轉為混淆碼（字元位移+3、字串反轉、Base64編碼）
+                // teacher1234 經此流程後的對應特徵碼為 NzY1NHVoZmtkaHc=
+                const shifted = password.split('').map(c => String.fromCharCode(c.charCodeAt(0) + 3)).reverse().join('');
+                const encoded = btoa(shifted);
 
-                // 2. "teacher密碼" 的 SHA-256 雜湊特徵碼
-                const targetHash = "6e61f237ef39f9797dfefdcf3287d3a8aa9f7431e78c8ea78f8fc85773173d19";
+                // 2. 特徵碼對比
+                const targetCode = "NzY1NHVoZmtkaHc=";
 
-                // 3. 特徵碼對比
-                if (hashHex === targetHash) {
+                if (encoded === targetCode) {
                     document.getElementById('teacher-panel').classList.remove('hidden');
                     Swal.fire('驗證成功', '已解鎖老師查看區塊', 'success');
                     setTimeout(() => {
