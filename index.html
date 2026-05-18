@@ -180,13 +180,17 @@
         // 儲存今日紀錄狀態
         let currentRecords = [];
 
+        // 本地模擬資料庫（當實體 API 連線失敗或處於沙盒預覽環境時使用）
+        let mockDatabase = [];
+        let useMockData = false;
+
         // 初始化
         window.onload = () => {
             renderSeats([]);
             fetchRecords();
         };
 
-        // 取得紀錄 (向實體 GAS 請求)
+        // 取得紀錄 (向實體 GAS 請求，失敗時自動進入模擬模式)
         async function fetchRecords() {
             Swal.fire({
                 title: '更新資料中...',
@@ -194,19 +198,31 @@
                 didOpen: () => Swal.showLoading()
             });
 
+            if (useMockData) {
+                // 如果已經處於模擬模式，直接渲染模擬數據
+                setTimeout(() => {
+                    handleRecordsUpdate(mockDatabase);
+                    Swal.close();
+                }, 400);
+                return;
+            }
+
             try {
-                // 使用 GET 請求獲取今日資料，避免 CORS 複雜請求預檢 (Preflight)
+                // 嘗試使用 GET 請求獲取今日資料
                 const response = await fetch(`${GAS_API_URL}?action=getTodayRecords`);
                 const data = await response.json();
                 handleRecordsUpdate(data);
                 Swal.close();
             } catch (err) {
-                console.error(err);
+                console.warn("GAS API 連線失敗，系統自動切換至『本地測試模擬模式』。詳細錯誤：", err);
+                useMockData = true; // 啟用模擬模式旗標
+                handleRecordsUpdate(mockDatabase);
+                
                 Swal.fire({
-                    title: '連線失敗',
-                    text: '無法讀取今日紀錄，請確認您的 GAS 部署網址是否正確並已發布為「所有人」皆可存取。',
-                    icon: 'error',
-                    confirmButtonText: '確定'
+                    title: '進入測試模擬模式',
+                    text: '因為偵測到跨網域限制或 GAS 網址尚未部署完成，系統已自動啟用「模擬模式」供您預覽。您現在可以直接點擊座位進行登記測試！',
+                    icon: 'info',
+                    confirmButtonText: '開始測試'
                 });
             }
         }
@@ -348,8 +364,41 @@
                 name: name
             };
 
+            // 如果處於模擬測試模式
+            if (useMockData) {
+                setTimeout(() => {
+                    const isTaken = mockDatabase.some(r => r.seat === seat);
+                    btn.innerHTML = originalHtml;
+                    btn.disabled = false;
+
+                    if (isTaken) {
+                        Swal.fire('哎呀!', '這個座位剛剛已經被別人登記走了！請重新選擇。', 'error');
+                    } else {
+                        const now = new Date();
+                        const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
+                        mockDatabase.push({
+                            time: timeStr,
+                            seat: seat,
+                            className: className,
+                            studentNo: no,
+                            studentName: name
+                        });
+                        Swal.fire({
+                            title: '登記成功 (測試)!',
+                            text: `班級 ${className} 座號 ${no} 的 ${name} 同學，座位已登記完成！`,
+                            icon: 'success',
+                            timer: 2000,
+                            timerProgressBar: true
+                        });
+                        closeModal();
+                        handleRecordsUpdate(mockDatabase);
+                    }
+                }, 600);
+                return;
+            }
+
+            // 實體 API 送出
             try {
-                // 採用 text/plain 格式送出 POST 請求，可繞過複雜 CORS 預檢程序，確保在各瀏覽器環境完美執行
                 const response = await fetch(GAS_API_URL, {
                     method: 'POST',
                     mode: 'cors',
@@ -381,7 +430,32 @@
                 console.error(err);
                 btn.innerHTML = originalHtml;
                 btn.disabled = false;
-                Swal.fire('錯誤', '傳送失敗！請確認網頁連線或確認後端部署。', 'error');
+                
+                // 實體送出失敗時，詢問是否進入模擬模式測試
+                Swal.fire({
+                    title: '連線失敗',
+                    text: '無法連線至試算表後端。是否要在網頁上暫時開啟「模擬測試模式」？(登記資料將不會寫入 Google 試算表)',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: '切換至模擬模式',
+                    cancelButtonText: '取消'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        useMockData = true;
+                        // 把當前輸入資料加入模擬
+                        const now = new Date();
+                        const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
+                        mockDatabase.push({
+                            time: timeStr,
+                            seat: seat,
+                            className: className,
+                            studentNo: no,
+                            studentName: name
+                        });
+                        closeModal();
+                        handleRecordsUpdate(mockDatabase);
+                    }
+                });
             }
         }
 
