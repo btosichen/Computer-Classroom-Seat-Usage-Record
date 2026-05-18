@@ -160,10 +160,36 @@
     </div>
 
     <script>
-        // 設定您的 Google Apps Script 部署 URL (已更換為最新的部署網址)
-        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwBHsIThW6SO4VCjLCtWaGqpWR-CILCGmf75d5rV-kxwTbSPS7Vd_48ScsrGkH8JhVaog/exec";
+        // 設定您的 Google Apps Script 部署 URL (保留您最新部署的網址)
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycby7GyxxZFBS4OTViIENQDmfWX3c9G2ezm1-C-jIxt19FsBg4qSs8mubNmB1EuL8lPi5kA/exec";
 
-        // 座位陣列：依照黑板在下方，第一排在最底下的視覺邏輯
+        // JSONP 通訊函式 (無敵防護：保證絕對不被 CORS 阻擋)
+        function fetchGAS(paramsObj) {
+            return new Promise((resolve, reject) => {
+                const callbackName = 'gas_cb_' + Math.round(1000000 * Math.random());
+                window[callbackName] = function(data) {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    resolve(data);
+                };
+                
+                const params = new URLSearchParams(paramsObj);
+                params.append('callback', callbackName);
+                
+                const script = document.createElement('script');
+                script.src = `${GAS_API_URL}?${params.toString()}`;
+                
+                script.onerror = () => {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    reject(new Error("網路連線或授權失敗，請檢查網址或是否已完成首次授權"));
+                };
+                
+                document.body.appendChild(script);
+            });
+        }
+
+        // 座位陣列
         const seatLayout = [
             ['10', '20', '30', '備用'],
             ['9',  '19', '29', '39'],
@@ -177,20 +203,16 @@
             ['1',  '11', '21', '31']
         ];
         
-        // 儲存今日紀錄狀態
         let currentRecords = [];
-
-        // 本地模擬資料庫（當實體 API 連線失敗或處於沙盒預覽環境時使用）
         let mockDatabase = [];
         let useMockData = false;
 
-        // 初始化
         window.onload = () => {
             renderSeats([]);
             fetchRecords();
         };
 
-        // 取得紀錄 (向實體 GAS 請求，失敗時自動進入模擬模式)
+        // 取得紀錄
         async function fetchRecords() {
             Swal.fire({
                 title: '更新資料中...',
@@ -207,16 +229,10 @@
             }
 
             try {
-                // 嘗試使用 GET 請求獲取今日資料，使用 cors 模式與跟隨重定向
-                const response = await fetch(`${GAS_API_URL}?action=getTodayRecords`, {
-                    method: 'GET',
-                    mode: 'cors',
-                    redirect: 'follow'
-                });
-                const data = await response.json();
+                // 改用 JSONP 方式獲取資料，徹底繞過 CORS
+                const data = await fetchGAS({ action: 'getTodayRecords' });
                 
                 if (data.error) {
-                    // 即使回傳成功，但 GAS 內部發生邏輯錯誤
                     throw new Error(data.error);
                 }
                 
@@ -224,12 +240,12 @@
                 Swal.close();
             } catch (err) {
                 console.warn("GAS API 連線或執行失敗，系統自動切換至『測試模擬模式』。詳細錯誤：", err);
-                useMockData = true; // 啟用模擬模式旗標
+                useMockData = true;
                 handleRecordsUpdate(mockDatabase);
                 
                 Swal.fire({
                     title: '進入測試模擬模式',
-                    text: '連線 GAS 失敗（原因：' + err.message + '）。系統已自動啟用「模擬模式」供您預覽。您可以直接在畫面上進行登記測試！\n\n如果您已經完成部署，請務必確認您已進行「首次手動執行授權」！',
+                    text: '連線 GAS 失敗（原因：' + err.message + '）。系統已自動啟用「模擬模式」供您預覽。\n\n如果您已經完成部署，請務必確認您已進行「首次手動執行授權」！',
                     icon: 'info',
                     confirmButtonText: '開始測試'
                 });
@@ -241,8 +257,6 @@
             currentRecords = records;
             renderSeats(records);
             updateTeacherTable(records);
-            
-            // 更新統計
             document.getElementById('stats-used').innerText = records.length;
         }
 
@@ -251,7 +265,6 @@
             const grid = document.getElementById('seating-grid');
             grid.innerHTML = '';
 
-            // 建立快速查詢的 Map
             const recordMap = {};
             records.forEach(r => {
                 recordMap[r.seat] = r;
@@ -263,13 +276,11 @@
                     btn.className = `seat-card relative flex flex-col items-center justify-center p-2 md:p-4 rounded-xl shadow-sm border-2 font-black text-base md:text-xl overflow-hidden aspect-square`;
                     
                     if (seatNo === '備用') {
-                        // 備用座位樣式
                         btn.classList.add('bg-gray-200', 'text-gray-400', 'border-gray-300', 'cursor-not-allowed', 'opacity-70');
                         btn.innerHTML = `<i class="ph-fill ph-prohibit text-2xl mb-1"></i><span class="text-sm">備用</span>`;
                         btn.disabled = true;
                     } 
                     else if (recordMap[seatNo]) {
-                        // 已登記座位樣式
                         const rec = recordMap[seatNo];
                         btn.classList.add('bg-green-400', 'text-white', 'border-green-500', 'cursor-not-allowed', 'shadow-inner');
                         btn.innerHTML = `
@@ -283,7 +294,6 @@
                         };
                     } 
                     else {
-                        // 可使用座位樣式
                         btn.classList.add('bg-white', 'text-blue-600', 'border-blue-200', 'hover:border-blue-400', 'hover:bg-blue-50', 'hover:shadow-lg');
                         btn.innerHTML = `
                             <i class="ph-duotone ph-desktop text-2xl md:text-3xl text-blue-400 mb-1"></i>
@@ -297,7 +307,6 @@
             });
         }
 
-        // 開啟填寫表單
         function openModal(seatNo) {
             document.getElementById('input-seat').value = seatNo;
             document.getElementById('input-class').value = '';
@@ -310,17 +319,14 @@
             modal.classList.remove('hidden');
             modal.classList.add('flex');
             
-            // 小動畫
             setTimeout(() => {
                 content.classList.remove('scale-95');
                 content.classList.add('scale-100');
             }, 10);
             
-            // 自動 focus 在班級輸入框
             setTimeout(() => document.getElementById('input-class').focus(), 300);
         }
 
-        // 關閉填寫表單
         function closeModal() {
             const modal = document.getElementById('form-modal');
             const content = document.getElementById('modal-content');
@@ -341,25 +347,11 @@
             const no = document.getElementById('input-no').value.trim();
             const name = document.getElementById('input-name').value.trim();
 
-            // 防呆檢查
-            if (!className) {
-                Swal.fire('等等!', '「班級」不可以是空白的喔！', 'warning');
-                return;
-            }
-            if (!no) {
-                Swal.fire('等等!', '「座號」不可以是空白的喔！', 'warning');
-                return;
-            }
-            if (isNaN(no) || Number(no) <= 0) {
-                Swal.fire('等等!', '座號只能輸入正確的數字喔！', 'warning');
-                return;
-            }
-            if (!name) {
-                Swal.fire('等等!', '「姓名」不可以是空白的喔！', 'warning');
-                return;
-            }
+            if (!className) { Swal.fire('等等!', '「班級」不可以是空白的喔！', 'warning'); return; }
+            if (!no) { Swal.fire('等等!', '「座號」不可以是空白的喔！', 'warning'); return; }
+            if (isNaN(no) || Number(no) <= 0) { Swal.fire('等等!', '座號只能輸入正確的數字喔！', 'warning'); return; }
+            if (!name) { Swal.fire('等等!', '「姓名」不可以是空白的喔！', 'warning'); return; }
 
-            // UI 狀態：處理中
             const btn = document.getElementById('btn-submit');
             const originalHtml = btn.innerHTML;
             btn.innerHTML = `<i class="ph ph-spinner animate-spin"></i> 送出中...`;
@@ -373,7 +365,6 @@
                 name: name
             };
 
-            // 如果處於模擬測試模式
             if (useMockData) {
                 setTimeout(() => {
                     const isTaken = mockDatabase.some(r => r.seat === seat);
@@ -384,9 +375,8 @@
                         Swal.fire('哎呀!', '這個座位剛剛已經被別人登記走了！請重新選擇。', 'error');
                     } else {
                         const now = new Date();
-                        const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
                         mockDatabase.push({
-                            time: timeStr,
+                            time: now.toLocaleTimeString('zh-TW', { hour12: false }),
                             seat: seat,
                             className: className,
                             studentNo: no,
@@ -406,24 +396,9 @@
                 return;
             }
 
-            // 實體 API 送出 (改用 GET 請求，徹底繞過 POST 的 CORS 限制)
             try {
-                // 將資料轉換為網址參數 (Query String)
-                const params = new URLSearchParams({
-                    action: 'submitRecord',
-                    seat: seat,
-                    className: className,
-                    no: no,
-                    name: name
-                });
-
-                const response = await fetch(`${GAS_API_URL}?${params.toString()}`, {
-                    method: 'GET',
-                    mode: 'cors',
-                    redirect: 'follow'
-                });
-                
-                const res = await response.json();
+                // 實體 API 送出 (改用 JSONP 請求，徹底繞過 CORS 限制)
+                const res = await fetchGAS(payload);
                 
                 btn.innerHTML = originalHtml;
                 btn.disabled = false;
@@ -446,7 +421,6 @@
                 btn.innerHTML = originalHtml;
                 btn.disabled = false;
                 
-                // 實體送出失敗時，詢問是否進入模擬模式測試，或直接顯示錯誤
                 Swal.fire({
                     title: '連線失敗',
                     text: '無法寫入資料庫，原因可能是：' + err.message + '\n\n是否要在網頁上暫時開啟「模擬測試模式」？',
@@ -457,10 +431,8 @@
                 }).then((result) => {
                     if (result.isConfirmed) {
                         useMockData = true;
-                        const now = new Date();
-                        const timeStr = now.toLocaleTimeString('zh-TW', { hour12: false });
                         mockDatabase.push({
-                            time: timeStr,
+                            time: new Date().toLocaleTimeString('zh-TW', { hour12: false }),
                             seat: seat,
                             className: className,
                             studentNo: no,
@@ -508,7 +480,6 @@
                 return;
             }
 
-            // 依照時間排序 (最新在最上面)
             const sortedRecords = [...records].reverse();
 
             sortedRecords.forEach((r, index) => {
