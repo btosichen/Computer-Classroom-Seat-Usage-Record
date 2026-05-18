@@ -77,7 +77,7 @@
                 <!-- JavaScript 會在這裡插入座位卡片 -->
             </div>
 
-            <!-- 教室前方設備 (已對調位置：教師座位在上，大螢幕在下) -->
+            <!-- 教室前方設備 (教師座位在上，大螢幕在下) -->
             <div class="mt-8 space-y-4">
                 <div class="w-2/3 mx-auto bg-amber-600 text-white p-3 rounded-lg text-center shadow-md border-b-4 border-amber-800 flex items-center justify-center gap-2">
                     <i class="ph-fill ph-desk text-xl"></i>
@@ -160,6 +160,9 @@
     </div>
 
     <script>
+        // 設定您的 Google Apps Script 部署 URL
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzR7b4jeMVNpzE0IjX8vtDdBmEjXqA8F02tXRrcx_3GDP3rbwUUFdJjoP7LUIJTNOcr6A/exec";
+
         // 座位陣列：依照黑板在下方，第一排在最底下的視覺邏輯
         const seatLayout = [
             ['10', '20', '30', '備用'],
@@ -173,17 +176,9 @@
             ['2',  '12', '22', '32'],
             ['1',  '11', '21', '31']
         ];
-
-        // 判斷是否在本地端/Canvas預覽 (如果找不到 google.script 則為 true)
-        const isLocalPreview = typeof google === 'undefined';
         
         // 儲存今日紀錄狀態
         let currentRecords = [];
-        
-        // 本地模擬資料庫 (加入預設欄位)
-        let mockDatabase = [
-            // { time: "08:15:30", seat: "5", className: "803", studentNo: "12", studentName: "王小明" }
-        ];
 
         // 初始化
         window.onload = () => {
@@ -191,30 +186,28 @@
             fetchRecords();
         };
 
-        // 取得紀錄 (向 GAS 請求)
-        function fetchRecords() {
+        // 取得紀錄 (向實體 GAS 請求)
+        async function fetchRecords() {
             Swal.fire({
                 title: '更新資料中...',
                 allowOutsideClick: false,
                 didOpen: () => Swal.showLoading()
             });
 
-            if (isLocalPreview) {
-                // 模擬網路延遲
-                setTimeout(() => {
-                    handleRecordsUpdate(mockDatabase);
-                    Swal.close();
-                }, 500);
-            } else {
-                google.script.run
-                    .withSuccessHandler(res => {
-                        handleRecordsUpdate(res);
-                        Swal.close();
-                    })
-                    .withFailureHandler(err => {
-                        Swal.fire('錯誤', '無法讀取資料，請確認網路連線', 'error');
-                    })
-                    .getTodayRecords();
+            try {
+                // 使用 GET 請求獲取今日資料，避免 CORS 複雜請求預檢 (Preflight)
+                const response = await fetch(`${GAS_API_URL}?action=getTodayRecords`);
+                const data = await response.json();
+                handleRecordsUpdate(data);
+                Swal.close();
+            } catch (err) {
+                console.error(err);
+                Swal.fire({
+                    title: '連線失敗',
+                    text: '無法讀取今日紀錄，請確認您的 GAS 部署網址是否正確並已發布為「所有人」皆可存取。',
+                    icon: 'error',
+                    confirmButtonText: '確定'
+                });
             }
         }
 
@@ -225,7 +218,6 @@
             updateTeacherTable(records);
             
             // 更新統計
-            const totalSeats = 39; // 扣除一個備用
             document.getElementById('stats-used').innerText = records.length;
         }
 
@@ -318,7 +310,7 @@
         }
 
         // 送出表單資料
-        function submitForm() {
+        async function submitForm() {
             const seat = document.getElementById('input-seat').value;
             const className = document.getElementById('input-class').value.trim();
             const no = document.getElementById('input-no').value.trim();
@@ -348,51 +340,48 @@
             btn.innerHTML = `<i class="ph ph-spinner animate-spin"></i> 送出中...`;
             btn.disabled = true;
 
-            const formData = { seat: seat, className: className, no: no, name: name };
+            const payload = {
+                action: 'submitRecord',
+                seat: seat,
+                className: className,
+                no: no,
+                name: name
+            };
 
-            if (isLocalPreview) {
-                // 模擬後端邏輯
-                setTimeout(() => {
-                    const isTaken = mockDatabase.some(r => r.seat === seat);
-                    if(isTaken) {
-                        Swal.fire('哎呀!', '這個座位剛剛已經被別人登記走了！請重新選擇。', 'error');
-                    } else {
-                        const now = new Date();
-                        mockDatabase.push({
-                            time: now.toLocaleTimeString('zh-TW', {hour12: false}),
-                            seat: seat,
-                            className: className,
-                            studentNo: no,
-                            studentName: name
-                        });
-                        Swal.fire('登記成功!', `座位 ${seat} 已經登記完成囉！`, 'success');
-                        closeModal();
-                        handleRecordsUpdate(mockDatabase);
-                    }
-                    btn.innerHTML = originalHtml;
-                    btn.disabled = false;
-                }, 800);
-            } else {
-                // 呼叫 GAS
-                google.script.run
-                    .withSuccessHandler(res => {
-                        btn.innerHTML = originalHtml;
-                        btn.disabled = false;
-                        
-                        if (res.error) {
-                            Swal.fire('哎呀!', res.error, 'error');
-                        } else {
-                            Swal.fire('登記成功!', '你的座位已經記錄起來囉！', 'success');
-                            closeModal();
-                            handleRecordsUpdate(res.records);
-                        }
-                    })
-                    .withFailureHandler(err => {
-                        btn.innerHTML = originalHtml;
-                        btn.disabled = false;
-                        Swal.fire('錯誤', '網路好像有點問題，請再試一次', 'error');
-                    })
-                    .submitRecord(formData);
+            try {
+                // 採用 text/plain 格式送出 POST 請求，可繞過複雜 CORS 預檢程序，確保在各瀏覽器環境完美執行
+                const response = await fetch(GAS_API_URL, {
+                    method: 'POST',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'text/plain;charset=utf-8'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const res = await response.json();
+                
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+                
+                if (res.error) {
+                    Swal.fire('哎呀!', res.error, 'error');
+                } else {
+                    Swal.fire({
+                        title: '登記成功!',
+                        text: `班級 ${className} 座號 ${no} 的 ${name} 同學，座位已登記完成！`,
+                        icon: 'success',
+                        timer: 2000,
+                        timerProgressBar: true
+                    });
+                    closeModal();
+                    handleRecordsUpdate(res.records);
+                }
+            } catch (err) {
+                console.error(err);
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+                Swal.fire('錯誤', '傳送失敗！請確認網頁連線或確認後端部署。', 'error');
             }
         }
 
