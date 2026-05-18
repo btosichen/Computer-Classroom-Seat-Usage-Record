@@ -457,9 +457,9 @@
             }
         }
 
-        // 老師功能：驗證密碼
-        function promptTeacher() {
-            Swal.fire({
+        // 老師功能：驗證密碼 (使用 SHA-256 加密防範學生查看原始碼)
+        async function promptTeacher() {
+            const { value: password } = await Swal.fire({
                 title: '教師專區',
                 input: 'password',
                 inputLabel: '請輸入密碼查看今日紀錄',
@@ -467,19 +467,30 @@
                 showCancelButton: true,
                 confirmButtonText: '確定',
                 cancelButtonText: '取消',
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    if (result.value === 'teacher123') {
-                        document.getElementById('teacher-panel').classList.remove('hidden');
-                        Swal.fire('驗證成功', '已解鎖老師查看區塊', 'success');
-                        setTimeout(() => {
-                            document.getElementById('teacher-panel').scrollIntoView({ behavior: 'smooth' });
-                        }, 300);
-                    } else {
-                        Swal.fire('錯誤', '密碼不正確喔！', 'error');
-                    }
-                }
             });
+
+            if (password !== undefined) {
+                // 1. 將輸入密碼轉為 SHA-256 雜湊值
+                const encoder = new TextEncoder();
+                const data = encoder.encode(password);
+                const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+                // 2. "teacher密碼" 的 SHA-256 雜湊特徵碼
+                const targetHash = "6e61f237ef39f9797dfefdcf3287d3a8aa9f7431e78c8ea78f8fc85773173d19";
+
+                // 3. 特徵碼對比
+                if (hashHex === targetHash) {
+                    document.getElementById('teacher-panel').classList.remove('hidden');
+                    Swal.fire('驗證成功', '已解鎖老師查看區塊', 'success');
+                    setTimeout(() => {
+                        document.getElementById('teacher-panel').scrollIntoView({ behavior: 'smooth' });
+                    }, 300);
+                } else {
+                    Swal.fire('錯誤', '密碼不正確喔！', 'error');
+                }
+            }
         }
 
         // 老師功能：換下一節課 (清空畫面狀態，不刪除試算表資料)
@@ -512,7 +523,7 @@
                             throw new Error(res.error);
                         }
                         handleRecordsUpdate([]);
-                        Swal.fire('已清空！', '畫面已重置，可以讓下一班開始登記了。', 'success');
+                        Swal.fire('已清空！', '畫面已重置，可以讓下一班開始登記了.。。', 'success');
                     } catch (err) {
                         console.error(err);
                         Swal.fire("重置失敗", err.message, "error");
