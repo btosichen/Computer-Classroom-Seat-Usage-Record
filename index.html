@@ -327,41 +327,8 @@ function fetchGAS(paramsObj) {
         }
 
         // 送出表單資料
-        async function submitForm() {
-  const seat = document.getElementById("input-seat").value;
-  const className = document.getElementById("input-class").value.trim();
-  const no = document.getElementById("input-no").value.trim();
-  const name = document.getElementById("input-name").value.trim();
-
-  if (!className || !no || !name) {
-    alert("班級、座號、姓名都要填喔！");
-    return;
-  }
-
-  try {
-    const res = await fetchGAS({
-      action: "submitRecord",
-      seat: seat,
-      className: className,
-      no: no,
-      name: name
-    });
-
-    if (res.error) {
-      alert(res.error);
-      return;
-    }
-
-    alert("登記成功！");
-    closeModal();
-    handleRecordsUpdate(res.records);
-
-  } catch (err) {
-    console.error(err);
-    alert("寫入失敗：" + err.message);
-  }
-}
-            async function submitForm() {
+        // 送出表單資料
+async function submitForm() {
   const seat = document.getElementById("input-seat").value;
   const className = document.getElementById("input-class").value.trim();
   const no = document.getElementById("input-no").value.trim();
