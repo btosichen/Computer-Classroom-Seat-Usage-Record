@@ -97,9 +97,14 @@
                 <h2 class="text-2xl font-bold text-purple-700 flex items-center gap-2">
                     <i class="ph-fill ph-clipboard-text"></i> 今日詳細紀錄
                 </h2>
-                <button onclick="document.getElementById('teacher-panel').classList.add('hidden')" class="text-gray-500 hover:text-red-500">
-                    <i class="ph-fill ph-x-circle text-2xl"></i>
-                </button>
+                <div class="flex items-center gap-3">
+                    <button onclick="resetForNextClass()" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg font-bold shadow-md flex items-center gap-2 transition-colors text-sm" title="清空目前畫面座位，換下一班">
+                        <i class="ph-bold ph-broom"></i> 換下一節課
+                    </button>
+                    <button onclick="document.getElementById('teacher-panel').classList.add('hidden')" class="text-gray-500 hover:text-red-500">
+                        <i class="ph-fill ph-x-circle text-2xl"></i>
+                    </button>
+                </div>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse">
@@ -158,34 +163,37 @@
             </div>
         </div>
     </div>
-<script>
-   const GAS_API_URL = "https://script.google.com/macros/s/AKfycby7GyxxZFBS4OTViIENQDmfWX3c9G2ezm1-C-jIxt19FsBg4qSs8mubNmB1EuL8lPi5kA/exec";
 
-function fetchGAS(paramsObj) {
-  return new Promise((resolve, reject) => {
-    const callbackName = "gas_cb_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
+    <script>
+        // 設定您的 Google Apps Script 部署 URL (保留您最新部署的網址)
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwPgMbzs-2D47nfmZH-OB8ZYvjNFh5hrqBlSW2KUIat-F7d7P8ydMNX4kgaymUfpZWKuw/exec";
 
-    window[callbackName] = function(data) {
-      resolve(data);
-      delete window[callbackName];
-      script.remove();
-    };
+        // JSONP 通訊函式 (無敵防護：保證絕對不被 CORS 阻擋)
+        function fetchGAS(paramsObj) {
+            return new Promise((resolve, reject) => {
+                const callbackName = "gas_cb_" + Date.now() + "_" + Math.floor(Math.random() * 10000);
 
-    const params = new URLSearchParams(paramsObj);
-    params.append("callback", callbackName);
+                window[callbackName] = function(data) {
+                    resolve(data);
+                    delete window[callbackName];
+                    script.remove();
+                };
 
-    const script = document.createElement("script");
-    script.src = GAS_API_URL + "?" + params.toString();
+                const params = new URLSearchParams(paramsObj);
+                params.append("callback", callbackName);
 
-    script.onerror = function() {
-      delete window[callbackName];
-      script.remove();
-      reject(new Error("GAS 連線失敗，請檢查部署權限或網址是否正確"));
-    };
+                const script = document.createElement("script");
+                script.src = GAS_API_URL + "?" + params.toString();
 
-    document.body.appendChild(script);
-  });
-}
+                script.onerror = function() {
+                    delete window[callbackName];
+                    script.remove();
+                    reject(new Error("GAS 連線失敗，請檢查部署權限或網址是否正確"));
+                };
+
+                document.body.appendChild(script);
+            });
+        }
 
         // 座位陣列
         const seatLayout = [
@@ -212,7 +220,19 @@ function fetchGAS(paramsObj) {
 
         // 取得紀錄
         async function fetchRecords() {
-  
+            Swal.fire({
+                title: '更新資料中...',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            if (useMockData) {
+                setTimeout(() => {
+                    handleRecordsUpdate(mockDatabase);
+                    Swal.close();
+                }, 400);
+                return;
+            }
 
             try {
                 // 改用 JSONP 方式獲取資料，徹底繞過 CORS
@@ -313,6 +333,7 @@ function fetchGAS(paramsObj) {
             setTimeout(() => document.getElementById('input-class').focus(), 300);
         }
 
+        // 關閉填寫表單
         function closeModal() {
             const modal = document.getElementById('form-modal');
             const content = document.getElementById('modal-content');
@@ -327,46 +348,114 @@ function fetchGAS(paramsObj) {
         }
 
         // 送出表單資料
-        // 送出表單資料
-async function submitForm() {
-  const seat = document.getElementById("input-seat").value;
-  const className = document.getElementById("input-class").value.trim();
-  const no = document.getElementById("input-no").value.trim();
-  const name = document.getElementById("input-name").value.trim();
+        async function submitForm() {
+            const seat = document.getElementById('input-seat').value;
+            const className = document.getElementById('input-class').value.trim();
+            const no = document.getElementById('input-no').value.trim();
+            const name = document.getElementById('input-name').value.trim();
 
-  if (!className || !no || !name) {
-    Swal.fire("等等！", "班級、座號、姓名都要填喔！", "warning");
-    return;
-  }
+            if (!className || !no || !name) {
+                Swal.fire('等等！', '班級、座號、姓名都要填喔！', 'warning');
+                return;
+            }
 
-  if (isNaN(no) || Number(no) <= 0) {
-    Swal.fire("等等！", "座號只能輸入正確的數字喔！", "warning");
-    return;
-  }
+            if (isNaN(no) || Number(no) <= 0) {
+                Swal.fire('等等！', '座號只能輸入正確的數字喔！', 'warning');
+                return;
+            }
 
-  try {
-    const res = await fetchGAS({
-      action: "submitRecord",
-      seat: seat,
-      className: className,
-      no: no,
-      name: name
-    });
+            const btn = document.getElementById('btn-submit');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = `<i class="ph ph-spinner animate-spin"></i> 送出中...`;
+            btn.disabled = true;
 
-    if (res.error) {
-      Swal.fire("哎呀！", res.error, "error");
-      return;
-    }
+            const payload = {
+                action: 'submitRecord',
+                seat: seat,
+                className: className,
+                no: no,
+                name: name
+            };
 
-    Swal.fire("登記成功！", "座位已成功寫入 Google 試算表。", "success");
-    closeModal();
-    handleRecordsUpdate(res.records);
+            if (useMockData) {
+                setTimeout(() => {
+                    const isTaken = mockDatabase.some(r => r.seat === seat);
+                    btn.innerHTML = originalHtml;
+                    btn.disabled = false;
 
-  } catch (err) {
-    console.error(err);
-    Swal.fire("寫入失敗", err.message, "error");
-  }
-}
+                    if (isTaken) {
+                        Swal.fire('哎呀!', '這個座位剛剛已經被別人登記走了！請重新選擇。', 'error');
+                    } else {
+                        const now = new Date();
+                        mockDatabase.push({
+                            time: now.toLocaleTimeString('zh-TW', { hour12: false }),
+                            seat: seat,
+                            className: className,
+                            studentNo: no,
+                            studentName: name
+                        });
+                        Swal.fire({
+                            title: '登記成功 (測試)!',
+                            text: `班級 ${className} 座號 ${no} 的 ${name} 同學，座位已登記完成！`,
+                            icon: 'success',
+                            timer: 2000,
+                            timerProgressBar: true
+                        });
+                        closeModal();
+                        handleRecordsUpdate(mockDatabase);
+                    }
+                }, 600);
+                return;
+            }
+
+            try {
+                // 實體 API 送出 (改用 JSONP 請求，徹底繞過 CORS 限制)
+                const res = await fetchGAS(payload);
+                
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+                
+                if (res.error) {
+                    Swal.fire('哎呀!', res.error, 'error');
+                } else {
+                    Swal.fire({
+                        title: '登記成功!',
+                        text: `班級 ${className} 座號 ${no} 的 ${name} 同學，座位已登記完成！`,
+                        icon: 'success',
+                        timer: 2000,
+                        timerProgressBar: true
+                    });
+                    closeModal();
+                    handleRecordsUpdate(res.records);
+                }
+            } catch (err) {
+                console.error(err);
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+                
+                Swal.fire({
+                    title: '連線失敗',
+                    text: '無法寫入資料庫，原因可能是：' + err.message + '\n\n是否要在網頁上暫時開啟「模擬測試模式」？',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: '切換至模擬模式',
+                    cancelButtonText: '取消'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        useMockData = true;
+                        mockDatabase.push({
+                            time: new Date().toLocaleTimeString('zh-TW', { hour12: false }),
+                            seat: seat,
+                            className: className,
+                            studentNo: no,
+                            studentName: name
+                        });
+                        closeModal();
+                        handleRecordsUpdate(mockDatabase);
+                    }
+                });
+            }
+        }
 
         // 老師功能：驗證密碼
         function promptTeacher() {
@@ -388,6 +477,45 @@ async function submitForm() {
                         }, 300);
                     } else {
                         Swal.fire('錯誤', '密碼不正確喔！', 'error');
+                    }
+                }
+            });
+        }
+
+        // 老師功能：換下一節課 (清空畫面狀態，不刪除試算表資料)
+        async function resetForNextClass() {
+            Swal.fire({
+                title: '確定要換下一節課嗎？',
+                text: '這將會清空目前畫面的座位狀態，讓下一個班級可以重新點選登記。(之前的紀錄仍會安全保存在 Google 試算表中，並加上分隔線！)',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#9ca3af',
+                confirmButtonText: '是的，清空畫面！',
+                cancelButtonText: '取消'
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({ title: '清理畫面中...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                    
+                    if (useMockData) {
+                        setTimeout(() => {
+                            mockDatabase = [];
+                            handleRecordsUpdate(mockDatabase);
+                            Swal.fire('已清空！', '畫面已重置，可以讓下一班開始登記了。', 'success');
+                        }, 500);
+                        return;
+                    }
+
+                    try {
+                        const res = await fetchGAS({ action: 'resetClass' });
+                        if (res.error) {
+                            throw new Error(res.error);
+                        }
+                        handleRecordsUpdate([]);
+                        Swal.fire('已清空！', '畫面已重置，可以讓下一班開始登記了。', 'success');
+                    } catch (err) {
+                        console.error(err);
+                        Swal.fire("重置失敗", err.message, "error");
                     }
                 }
             });
